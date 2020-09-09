@@ -6,7 +6,9 @@ package broker
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -72,7 +74,7 @@ func (c *Client) readPump() {
 		c.hub.unregister <- c
 		c.conn.Close()
 	}()
-	c.conn.SetReadLimit(maxMessageSize)
+	// c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
@@ -136,16 +138,18 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	signature, err := hex.DecodeString(registerMsg.TimestampSignature)
+	fmt.Println(registerMsg.TimestampSignature)
+	signature, err := base64.RawURLEncoding.DecodeString(registerMsg.TimestampSignature)
 
 	if err != nil {
 		log.Println("bad signature format")
+		log.Println(err.Error())
 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	publicKey, err := hex.DecodeString(registerMsg.PublicKey)
+	publicKey, err := base64.RawURLEncoding.DecodeString(registerMsg.PublicKey)
 
 	if err != nil {
 		log.Println("bad public key format")
@@ -185,9 +189,9 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Client successfully connected: %s", registerMsg.PublicKey)
+	log.Printf("Client successfully connected: %s", hex.EncodeToString(publicKey))
 
-	client := &Client{hub: hub, id: registerMsg.PublicKey, conn: conn, send: make(chan OutgoingMessage, 256)}
+	client := &Client{hub: hub, id: hex.EncodeToString(publicKey), conn: conn, send: make(chan OutgoingMessage, 256)}
 	client.hub.register <- client
 
 	// Allow collection of memory referenced by the caller by doing all work in
